@@ -1,0 +1,16 @@
+# Normalise line endings so a checkout on RHEL 9 gets usable scripts.
+# Without this, core.autocrlf=true on a Windows clone writes CRLF into the
+# shell scripts and the RHEL shebang fails with "bad interpreter: ...^M".
+
+* text=auto
+
+*.sh    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+*.jar   binary
+*.zip   binary

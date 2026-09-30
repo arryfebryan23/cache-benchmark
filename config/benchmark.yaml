@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# cache-benchmark configuration (PRD section 35)
+#
+# Priority: CLI argument > this YAML file > application default
+# ---------------------------------------------------------------------------
+
+benchmark:
+
+  # redis | hazelcast
+  target: redis
+
+  # GET | SET (case insensitive)
+  operation: GET
+
+  # Number of benchmark worker threads. Identical for both targets (Fairness Rule 1).
+  threads: 16
+
+  # Size of the keyspace: benchmark:0 .. benchmark:<keyCount-1>
+  keyCount: 1000000
+
+  # Value size in bytes (Fairness Rule 2)
+  payloadBytes: 1024
+
+  # Global seed; worker N uses seed + N (PRD section 13)
+  randomSeed: 123456
+
+  # Warmup is excluded from the result (PRD section 21)
+  warmupSeconds: 30
+
+  # Measurement window (PRD section 22)
+  durationSeconds: 60
+
+  # Load the keyspace before a GET benchmark (PRD section 18).
+  # Ignored for SET, which writes its own data.
+  preload: true
+
+  # Precompute the key strings so key building is not part of measured latency
+  # (PRD sections 14 and 44)
+  precomputeKeys: true
+
+  # Above this error rate the result is reported as INVALID (PRD section 29)
+  maxErrorRatePercent: 1.0
+
+  # Applied identically to both clients so that a stalled request is counted
+  # as a failure at the same point in time on both sides.
+  operationTimeoutSeconds: 10
+
+  outputDirectory: ./results
+
+
+redis:
+
+  host: 127.0.0.1
+
+  port: 6379
+
+  # null or omitted when the server has no password
+  password: null
+
+  database: 0
+
+
+hazelcast:
+
+  clusterName: dev
+
+  addresses:
+
+    - 127.0.0.1:5701
+
+  mapName: benchmark-map
