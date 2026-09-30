@@ -8,6 +8,8 @@ thing that changes between a Redis run and a Hazelcast run is which
 
 Built from [docs/PRD.md](docs/PRD.md).
 
+Menjalankan lagi di VM setelah jeda: [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
 ---
 
 ## 1. Purpose
