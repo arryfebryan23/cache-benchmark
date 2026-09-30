@@ -119,6 +119,12 @@ public class BenchmarkConfig {
         if (redis.getDatabase() < 0) {
             errors.add("redis.database must not be negative.");
         }
+        boolean hasUser = redis.getUsername() != null && !redis.getUsername().isBlank();
+        boolean hasPassword = redis.getPassword() != null && !redis.getPassword().isEmpty();
+        if (hasUser && !hasPassword) {
+            errors.add("redis.username is set but redis.password is empty. "
+                    + "ACL authentication needs both.");
+        }
     }
 
     private void validateHazelcast(List<String> errors) {
@@ -230,6 +236,7 @@ public class BenchmarkConfig {
 
         private String host = "127.0.0.1";
         private int port = 6379;
+        private String username;
         private String password;
         private int database = 0;
 
@@ -238,6 +245,9 @@ public class BenchmarkConfig {
 
         public int getPort() { return port; }
         public void setPort(int port) { this.port = port; }
+
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
 
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }

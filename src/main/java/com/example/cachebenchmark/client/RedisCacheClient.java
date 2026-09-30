@@ -22,6 +22,9 @@ import java.time.Duration;
  */
 public final class RedisCacheClient implements CacheClient {
 
+    /** Read during connection validation. Never written, so a miss is expected. */
+    private static final String CONNECTIVITY_PROBE_KEY = "cache-benchmark:connectivity-probe";
+
     private final RedisClient client;
     private final StatefulRedisConnection<String, byte[]> connection;
     private final RedisCommands<String, byte[]> commands;
@@ -33,9 +36,17 @@ public final class RedisCacheClient implements CacheClient {
                 .withDatabase(config.getDatabase())
                 .withTimeout(operationTimeout);
 
+        String username = config.getUsername();
         String password = config.getPassword();
+        boolean hasUsername = username != null && !username.isBlank();
         if (password != null && !password.isEmpty()) {
-            uri.withPassword(password.toCharArray());
+            if (hasUsername) {
+                // Redis 6 ACL user. AUTH with only a password authenticates as
+                // the default user, which a server with named users rejects.
+                uri.withAuthentication(username, password.toCharArray());
+            } else {
+                uri.withPassword(password.toCharArray());
+            }
         }
 
         this.client = RedisClient.create(uri.build());
@@ -50,6 +61,8 @@ public final class RedisCacheClient implements CacheClient {
         this.description = "lettuce sync, single shared multiplexed connection to "
                 + config.getHost() + ":" + config.getPort()
                 + ", db=" + config.getDatabase()
+                + ", auth=" + (password == null || password.isEmpty()
+                        ? "none" : (hasUsername ? "acl user " + username : "password"))
                 + ", commandTimeout=" + operationTimeout.toSeconds() + "s";
     }
 
@@ -74,6 +87,11 @@ public final class RedisCacheClient implements CacheClient {
         if (!"PONG".equalsIgnoreCase(reply)) {
             throw new IllegalStateException("Redis PING returned an unexpected reply: " + reply);
         }
+        // PING alone is not enough. Some servers answer it on an unauthenticated
+        // connection, so bad credentials would survive validation and only
+        // surface part-way through preload. A real read exercises the same
+        // command path the benchmark uses, including ACL permissions.
+        commands.get(CONNECTIVITY_PROBE_KEY);
     }
 
     @Override

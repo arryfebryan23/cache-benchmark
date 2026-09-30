@@ -179,6 +179,7 @@ benchmark:
 redis:
   host: 127.0.0.1              # point at your Redis VM
   port: 6379
+  username: null               # Redis 6 ACL user; null means default user
   password: null
   database: 0
 

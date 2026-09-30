@@ -94,6 +94,31 @@ class BenchmarkConfigValidationTest {
     }
 
     @Test
+    void rejectsAUsernameWithoutAPassword() {
+        // AUTH with a username needs both halves. Letting this through would
+        // produce a WRONGPASS failure only after the client is already up.
+        BenchmarkConfig config = valid();
+        config.getRedis().setUsername("superadmin");
+        config.getRedis().setPassword(null);
+        assertMessageContains(config, "redis.username is set but redis.password is empty");
+    }
+
+    @Test
+    void acceptsAUsernameWithAPassword() {
+        BenchmarkConfig config = valid();
+        config.getRedis().setUsername("superadmin");
+        config.getRedis().setPassword("secret");
+        assertDoesNotThrow(config::validate);
+    }
+
+    @Test
+    void acceptsAPasswordWithoutAUsername() {
+        BenchmarkConfig config = valid();
+        config.getRedis().setPassword("secret");
+        assertDoesNotThrow(config::validate);
+    }
+
+    @Test
     void rejectsEmptyHazelcastAddresses() {
         BenchmarkConfig config = valid();
         config.getBenchmark().setTarget("hazelcast");

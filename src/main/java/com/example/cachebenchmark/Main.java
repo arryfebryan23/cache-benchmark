@@ -108,6 +108,10 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--redis-port", paramLabel = "PORT", description = "Redis port.")
     Integer redisPort;
 
+    @Option(names = "--redis-username", paramLabel = "USER",
+            description = "Redis ACL username. Omit for password-only AUTH as the default user.")
+    String redisUsername;
+
     @Option(names = "--redis-password", paramLabel = "SECRET", description = "Redis password.")
     String redisPassword;
 
@@ -205,6 +209,7 @@ public final class Main implements Callable<Integer> {
         BenchmarkConfig.Redis redis = config.getRedis();
         if (redisHost != null) redis.setHost(redisHost);
         if (redisPort != null) redis.setPort(redisPort);
+        if (redisUsername != null) redis.setUsername(redisUsername);
         if (redisPassword != null) redis.setPassword(redisPassword);
         if (redisDatabase != null) redis.setDatabase(redisDatabase);
 

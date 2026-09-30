@@ -54,6 +54,10 @@ redis:
 
   port: 6379
 
+  # Redis 6 ACL username. Leave null for password-only AUTH as the default user.
+  # A server with named ACL users rejects password-only AUTH with WRONGPASS.
+  username: null
+
   # null or omitted when the server has no password
   password: null
 
