@@ -2,6 +2,7 @@ package com.example.cachebenchmark.benchmark;
 
 import com.example.cachebenchmark.metrics.EnvironmentInfo;
 import com.example.cachebenchmark.metrics.ResultStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 import java.util.LinkedHashMap;
@@ -16,12 +17,12 @@ import java.util.Map;
  */
 @JsonPropertyOrder({
         "benchmarkVersion", "timestamp",
-        "target", "operation",
+        "target", "operation", "setPercent",
         "threads", "keyCount", "payloadBytes", "randomSeed",
         "warmupSeconds", "configuredDurationSeconds", "actualDurationSeconds",
         "attemptedOperations", "successfulOperations", "failedOperations",
         "cacheHits", "cacheMisses",
-        "tps", "latencyMs", "errorRatePercent", "status",
+        "tps", "latencyMs", "errorRatePercent", "status", "operations",
         "preloaded", "errors", "gc", "cpu", "connection", "fairness", "environment"
 })
 public final class BenchmarkResult {
@@ -31,6 +32,10 @@ public final class BenchmarkResult {
 
     public String target;
     public String operation;
+
+    /** Configured SET share of a MIXED run. Absent for GET and SET runs. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Double setPercent;
 
     public int threads;
     public int keyCount;
@@ -53,6 +58,14 @@ public final class BenchmarkResult {
     public double errorRatePercent;
     public ResultStatus status;
 
+    /**
+     * GET and SET reported separately for a MIXED run, keyed by operation
+     * name. Absent for single-operation runs, where the top-level figures
+     * already are the per-operation figures.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Map<String, OperationBreakdown> operations;
+
     public boolean preloaded;
 
     /** Error type to count plus one sample message (PRD section 61). */
@@ -72,6 +85,24 @@ public final class BenchmarkResult {
         public double p999;
         public double mean;
         public double max;
+    }
+
+    /**
+     * One operation type within a MIXED run. {@code tps} uses the same
+     * elapsed time as the overall figure, so GET tps plus SET tps equals the
+     * overall tps.
+     */
+    @JsonPropertyOrder({"attemptedOperations", "successfulOperations", "failedOperations",
+            "actualSharePercent", "tps", "latencyMs", "errorRatePercent"})
+    public static final class OperationBreakdown {
+        public long attemptedOperations;
+        public long successfulOperations;
+        public long failedOperations;
+        /** Share of all attempted operations, to compare with the configured setPercent. */
+        public double actualSharePercent;
+        public double tps;
+        public Latency latencyMs = new Latency();
+        public double errorRatePercent;
     }
 
     @JsonPropertyOrder({"count", "sampleMessage"})

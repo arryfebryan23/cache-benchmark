@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -105,6 +106,56 @@ class BenchmarkEngineTest {
         assertTrue(result.errors.containsKey("IllegalStateException"));
         assertEquals(result.failedOperations, result.errors.get("IllegalStateException").count);
         assertEquals("injected failure", result.errors.get("IllegalStateException").sampleMessage);
+    }
+
+    @Test
+    void mixedRunPreloadsAndSplitsGetAndSetAtTheConfiguredRatio() throws InterruptedException {
+        InMemoryCacheClient client = new InMemoryCacheClient();
+        BenchmarkConfig config = config("MIXED", 0, 1);
+        config.getBenchmark().setSetPercent(20);
+
+        BenchmarkResult result = new BenchmarkRunner(config).run(client);
+
+        assertTrue(result.preloaded, "MIXED reads, so it must preload");
+        assertEquals("MIXED", result.operation);
+        assertEquals(20.0, result.setPercent);
+        assertEquals(ResultStatus.VALID, result.status);
+
+        BenchmarkResult.OperationBreakdown get = result.operations.get("GET");
+        BenchmarkResult.OperationBreakdown set = result.operations.get("SET");
+        assertEquals(result.attemptedOperations, get.attemptedOperations + set.attemptedOperations);
+        assertEquals(result.successfulOperations, get.successfulOperations + set.successfulOperations);
+        assertEquals(result.tps, get.tps + set.tps, 0.001);
+
+        // Tens of thousands of draws at minimum; 20 % should land well within 2 points.
+        assertEquals(20.0, set.actualSharePercent, 2.0);
+        assertEquals(80.0, get.actualSharePercent, 2.0);
+
+        // Hits only count the GET side, and every GET hits a preloaded key.
+        assertEquals(get.successfulOperations, result.cacheHits);
+        assertEquals(0, result.cacheMisses);
+    }
+
+    @Test
+    void mixedRunAtTheExtremesIssuesOnlyOneOperation() throws InterruptedException {
+        BenchmarkConfig allSet = config("MIXED", 0, 1);
+        allSet.getBenchmark().setSetPercent(100);
+        BenchmarkResult setOnly = new BenchmarkRunner(allSet).run(new InMemoryCacheClient());
+        assertEquals(0, setOnly.operations.get("GET").attemptedOperations);
+        assertTrue(setOnly.operations.get("SET").attemptedOperations > 0);
+
+        BenchmarkConfig allGet = config("MIXED", 0, 1);
+        allGet.getBenchmark().setSetPercent(0);
+        BenchmarkResult getOnly = new BenchmarkRunner(allGet).run(new InMemoryCacheClient());
+        assertEquals(0, getOnly.operations.get("SET").attemptedOperations);
+        assertTrue(getOnly.operations.get("GET").attemptedOperations > 0);
+    }
+
+    @Test
+    void singleOperationRunsCarryNoBreakdown() throws InterruptedException {
+        BenchmarkResult result = new BenchmarkRunner(config("SET", 0, 1)).run(new InMemoryCacheClient());
+        assertNull(result.operations);
+        assertNull(result.setPercent);
     }
 
     @Test

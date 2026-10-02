@@ -70,6 +70,10 @@ public class BenchmarkConfig {
         } catch (ConfigurationException e) {
             errors.add(e.getMessage());
         }
+        if (Double.isNaN(benchmark.getSetPercent())
+                || benchmark.getSetPercent() < 0 || benchmark.getSetPercent() > 100) {
+            errors.add("setPercent must be between 0 and 100.");
+        }
 
         if (benchmark.getThreads() <= 0) {
             errors.add("threads must be greater than zero.");
@@ -179,6 +183,7 @@ public class BenchmarkConfig {
 
         private String target = "redis";
         private String operation = "GET";
+        private double setPercent = 50.0;
         private int threads = 16;
         private int keyCount = 1_000_000;
         private int payloadBytes = 1024;
@@ -196,6 +201,10 @@ public class BenchmarkConfig {
 
         public String getOperation() { return operation; }
         public void setOperation(String operation) { this.operation = operation; }
+
+        /** Share of MIXED operations that are SET; the rest are GET. Ignored otherwise. */
+        public double getSetPercent() { return setPercent; }
+        public void setSetPercent(double setPercent) { this.setPercent = setPercent; }
 
         public int getThreads() { return threads; }
         public void setThreads(int threads) { this.threads = threads; }

@@ -1,6 +1,7 @@
 # cache-benchmark
 
-Redis vs Hazelcast GET/SET throughput benchmark.
+Redis vs Hazelcast GET/SET throughput benchmark, plus a MIXED GET+SET
+workload with a configurable SET share.
 
 One benchmark engine, one workload generator, one set of counters. The only
 thing that changes between a Redis run and a Hazelcast run is which
@@ -165,7 +166,8 @@ CLI argument  >  YAML file  >  application default
 ```yaml
 benchmark:
   target: redis                # redis | hazelcast
-  operation: GET               # GET | SET
+  operation: GET               # GET | SET | MIXED
+  setPercent: 50               # MIXED only: % of operations that are SET
   threads: 16
   keyCount: 1000000
   payloadBytes: 1024
@@ -313,6 +315,55 @@ when the synchronous client call returns to the caller.
 
 ---
 
+## 9a. MIXED benchmark
+
+GET and SET interleaved in one closed loop. Every iteration draws which of
+the two to run; `setPercent` is the share that are SET, the rest are GET.
+
+```bash
+# 20 % SET / 80 % GET
+./scripts/run.sh --target redis --operation MIXED --set-percent 20 --threads 16
+
+# write-heavy
+./scripts/run.sh --target hazelcast --operation MIXED --set-percent 70
+```
+
+`--set-percent` accepts 0 to 100 with up to two decimals (`2.5` works). The
+default is 50.
+
+How it behaves:
+
+| | |
+|---|---|
+| Preload | Yes, like GET. The GET share needs a populated keyspace, and the same preload validation applies. |
+| Writes | SET overwrites a preloaded key with the same payload, so later GETs still hit. |
+| Draw | Seeded per worker from `randomSeed`, independent of the key stream. Same seed, same GET/SET sequence on both backends (Fairness Rule 5). |
+| Overall TPS | All successful GETs and SETs over the actual duration. |
+| Cache hits | Counted on the GET side only. |
+
+On top of the usual overall figures, the result reports GET and SET apart:
+
+```
+Per Operation          GET             SET
+--------------------------------------------------
+Actual Share        :         80.01 %          19.99 %
+Successful Ops      :      16,362,577        4,090,644
+Failed Ops          :               0                0
+Throughput          :         272,673           68,168  ops/sec
+p50                 :           0.401            0.502  ms
+p99                 :           2.500            3.250  ms
+```
+
+In JSON this is the `operations` block, keyed `GET` and `SET`, plus a
+top-level `setPercent`. GET tps plus SET tps equals the overall tps. In CSV it
+is five trailing columns, `set_percent, get_tps, set_tps, get_p99_ms,
+set_p99_ms`, left empty for GET and SET runs.
+
+Result files carry the share in their name:
+`results/redis/MIXED/redis_MIXED_s20_t16_p1024_20261002_143000.json`.
+
+---
+
 ## 10. Benchmark matrix
 
 The recommended comparison grid (PRD section 46):
@@ -344,6 +395,21 @@ with the first.
 
 Default cooldown between runs is 10 seconds (`COOLDOWN_SECONDS`).
 
+MIXED runs go through the same script. `SET_PERCENTS` lists the SET shares to
+try, and every MIXED cell is run once per share:
+
+```bash
+TARGETS="redis hazelcast" \
+OPERATIONS="MIXED" \
+SET_PERCENTS="10 20 50" \
+PAYLOADS="1024" \
+THREADS="8 16 32" \
+REPEATS=3 \
+./scripts/run-matrix.sh
+```
+
+`SET_PERCENTS` defaults to `50` and is ignored for GET and SET.
+
 ### Recommended sequence
 
 Start with GET at 1 KB across the whole concurrency ladder on Redis, repeat the
@@ -362,7 +428,9 @@ results/
 │   ├── GET/
 │   │   ├── redis_GET_t16_p1024_20260930_143000.json
 │   │   └── redis_GET_t16_p1024_20260930_143000.csv
-│   └── SET/
+│   ├── SET/
+│   └── MIXED/
+│       └── redis_MIXED_s20_t16_p1024_20260930_143000.json
 └── hazelcast/
     ├── GET/
     └── SET/
@@ -532,7 +600,7 @@ src/main/java/com/example/cachebenchmark/
 ├── benchmark/                 phases, workers, result assembly
 ├── client/                    CacheClient and the two adapters
 ├── config/                    YAML model, validation
-├── workload/                  GET and SET workloads, payload
+├── workload/                  GET and SET workloads, MIXED draw, payload
 ├── key/                       keyspace and uniform key generator
 ├── metrics/                   counters, HdrHistogram, GC, CPU
 └── output/                    console, JSON, CSV reporters

@@ -9,8 +9,12 @@ benchmark:
   # redis | hazelcast
   target: redis
 
-  # GET | SET (case insensitive)
+  # GET | SET | MIXED (case insensitive)
   operation: GET
+
+  # MIXED only: share of operations that are SET, 0-100. The rest are GET.
+  # 20 means 20 % SET / 80 % GET. Resolution 0.01 %. Ignored for GET and SET.
+  setPercent: 50
 
   # Number of benchmark worker threads. Identical for both targets (Fairness Rule 1).
   threads: 16
@@ -30,7 +34,7 @@ benchmark:
   # Measurement window (PRD section 22)
   durationSeconds: 60
 
-  # Load the keyspace before a GET benchmark (PRD section 18).
+  # Load the keyspace before a GET or MIXED benchmark (PRD section 18).
   # Ignored for SET, which writes its own data.
   preload: true
 

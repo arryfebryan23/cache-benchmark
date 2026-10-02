@@ -51,7 +51,7 @@ class CsvReporterTest {
         int headerColumns = lines.get(0).split(",", -1).length;
         int rowColumns = lines.get(1).split(",", -1).length;
         assertEquals(headerColumns, rowColumns);
-        assertEquals(18, headerColumns);
+        assertEquals(23, headerColumns);
     }
 
     @Test
@@ -67,6 +67,35 @@ class CsvReporterTest {
         assertEquals(4, lines.size(), "expected one header plus three rows");
         assertTrue(lines.get(0).startsWith("timestamp,"));
         assertTrue(lines.get(1).startsWith("2026-09-30"));
+    }
+
+    @Test
+    void mixedRunFillsThePerOperationColumns(@TempDir Path dir) throws IOException {
+        BenchmarkResult r = sampleResult();
+        r.operation = "MIXED";
+        r.setPercent = 20.0;
+        r.operations = new java.util.LinkedHashMap<>();
+        BenchmarkResult.OperationBreakdown get = new BenchmarkResult.OperationBreakdown();
+        get.tps = 272_672.96;
+        get.latencyMs.p99 = 2.5;
+        BenchmarkResult.OperationBreakdown set = new BenchmarkResult.OperationBreakdown();
+        set.tps = 68_168.24;
+        set.latencyMs.p99 = 3.25;
+        r.operations.put("GET", get);
+        r.operations.put("SET", set);
+
+        Path file = dir.resolve("result.csv");
+        new CsvReporter().write(r, file);
+        String row = Files.readAllLines(file).get(1);
+        assertTrue(row.endsWith(",20.00,272672.96,68168.24,2.500,3.250"), row);
+    }
+
+    @Test
+    void singleOperationRunLeavesThePerOperationColumnsEmpty(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("result.csv");
+        new CsvReporter().write(sampleResult(), file);
+        String row = Files.readAllLines(file).get(1);
+        assertTrue(row.endsWith(",VALID,,,,,"), row);
     }
 
     @Test

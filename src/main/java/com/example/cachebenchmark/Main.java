@@ -36,7 +36,7 @@ import java.util.concurrent.Callable;
         versionProvider = Main.VersionProvider.class,
         sortOptions = false,
         usageHelpWidth = 100,
-        description = "Compare Redis and Hazelcast GET/SET throughput using one shared benchmark engine.")
+        description = "Compare Redis and Hazelcast GET/SET/MIXED throughput using one shared benchmark engine.")
 public final class Main implements Callable<Integer> {
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
@@ -55,8 +55,13 @@ public final class Main implements Callable<Integer> {
     String target;
 
     @Option(names = "--operation", paramLabel = "OP",
-            description = "Operation to benchmark: GET or SET (case insensitive).")
+            description = "Operation to benchmark: GET, SET or MIXED (case insensitive).")
     String operation;
+
+    @Option(names = "--set-percent", paramLabel = "PERCENT",
+            description = "MIXED only: share of operations that are SET, 0-100. "
+                    + "The rest are GET. Default 50.")
+    Double setPercent;
 
     @Option(names = "--threads", paramLabel = "N",
             description = "Number of benchmark worker threads.")
@@ -194,6 +199,7 @@ public final class Main implements Callable<Integer> {
         BenchmarkConfig.Benchmark bench = config.getBenchmark();
         if (target != null) bench.setTarget(target);
         if (operation != null) bench.setOperation(operation);
+        if (setPercent != null) bench.setSetPercent(setPercent);
         if (threads != null) bench.setThreads(threads);
         if (keyCount != null) bench.setKeyCount(keyCount);
         if (payloadBytes != null) bench.setPayloadBytes(payloadBytes);

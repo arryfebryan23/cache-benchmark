@@ -13,12 +13,18 @@
 #
 #   TARGETS="redis hazelcast" \
 #   OPERATIONS="GET SET" \
+#   SET_PERCENTS="10 20 50" \
 #   PAYLOADS="100 1024 10240" \
 #   THREADS="1 2 4 8 16 32 64" \
 #   REPEATS=5 \
 #   DURATION=60 WARMUP=30 KEYS=1000000 \
 #   COOLDOWN_SECONDS=10 \
 #   ./scripts/run-matrix.sh
+#
+# SET_PERCENTS only applies when OPERATIONS contains MIXED: every MIXED cell
+# is run once per listed SET share. GET and SET cells ignore it.
+#
+#   OPERATIONS="MIXED" SET_PERCENTS="10 20 50" ./scripts/run-matrix.sh
 #
 set -uo pipefail
 
@@ -31,6 +37,7 @@ JVM_OPTS="${JVM_OPTS:--Xms2g -Xmx4g}"
 
 TARGETS="${TARGETS:-redis hazelcast}"
 OPERATIONS="${OPERATIONS:-GET SET}"
+SET_PERCENTS="${SET_PERCENTS:-50}"
 PAYLOADS="${PAYLOADS:-100 1024 10240}"
 THREADS="${THREADS:-1 2 4 8 16 32 64}"
 REPEATS="${REPEATS:-5}"
@@ -52,16 +59,30 @@ mkdir -p "$OUTPUT_DIR"
 LOG_DIR="$OUTPUT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
+# The SET shares to run for one operation. "-" stands for "not a MIXED run".
+mixes_for() {
+  if [[ "${1^^}" == "MIXED" ]]; then
+    echo "$SET_PERCENTS"
+  else
+    echo "-"
+  fi
+}
+
 total=0
-for _t in $TARGETS; do for _o in $OPERATIONS; do for _p in $PAYLOADS; do for _c in $THREADS; do
-  total=$((total + REPEATS))
-done; done; done; done
+for _t in $TARGETS; do for _o in $OPERATIONS; do for _m in $(mixes_for "$_o"); do
+  for _p in $PAYLOADS; do for _c in $THREADS; do
+    total=$((total + REPEATS))
+  done; done
+done; done; done
 
 echo "================================================================"
 echo "Benchmark matrix"
 echo "================================================================"
 echo "targets     : $TARGETS"
 echo "operations  : $OPERATIONS"
+if [[ " ${OPERATIONS^^} " == *" MIXED "* ]]; then
+  echo "set percents: $SET_PERCENTS"
+fi
 echo "payloads    : $PAYLOADS"
 echo "threads     : $THREADS"
 echo "repeats     : $REPEATS"
@@ -84,11 +105,18 @@ started_at=$(date +%s)
 
 for target in $TARGETS; do
   for operation in $OPERATIONS; do
+   for mix in $(mixes_for "$operation"); do
     for payload in $PAYLOADS; do
       for threads in $THREADS; do
         for repeat in $(seq 1 "$REPEATS"); do
           run_index=$((run_index + 1))
-          label="${target}_${operation}_p${payload}_t${threads}_r${repeat}"
+          mix_args=()
+          mix_label=""
+          if [[ "$mix" != "-" ]]; then
+            mix_args=(--set-percent "$mix")
+            mix_label="_s${mix}"
+          fi
+          label="${target}_${operation}${mix_label}_p${payload}_t${threads}_r${repeat}"
           log_file="$LOG_DIR/${label}.log"
 
           printf '[%d/%d] %s ... ' "$run_index" "$total" "$label"
@@ -97,6 +125,7 @@ for target in $TARGETS; do
             --config "$CONFIG" \
             --target "$target" \
             --operation "$operation" \
+            "${mix_args[@]}" \
             --threads "$threads" \
             --keys "$KEYS" \
             --payload "$payload" \
@@ -131,6 +160,7 @@ for target in $TARGETS; do
         done
       done
     done
+   done
   done
 done
 

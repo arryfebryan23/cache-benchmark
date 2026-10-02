@@ -1,6 +1,7 @@
 package com.example.cachebenchmark.output;
 
 import com.example.cachebenchmark.benchmark.BenchmarkResult;
+import com.example.cachebenchmark.benchmark.BenchmarkRunner;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,9 +33,14 @@ public final class ResultPaths {
         Path directory = Paths.get(outputDirectory).resolve(result.target).resolve(result.operation);
         Files.createDirectories(directory);
 
+        // A MIXED run also carries its SET share: redis_MIXED_s20_t16_p1024_...
+        String operation = result.setPercent == null
+                ? result.operation
+                : result.operation + "_s" + BenchmarkRunner.formatPercent(result.setPercent);
+
         String baseName = String.format("%s_%s_t%d_p%d_%s",
                 result.target,
-                result.operation,
+                operation,
                 result.threads,
                 result.payloadBytes,
                 LocalDateTime.now().format(STAMP));

@@ -1,6 +1,7 @@
 package com.example.cachebenchmark.output;
 
 import com.example.cachebenchmark.benchmark.BenchmarkResult;
+import com.example.cachebenchmark.benchmark.BenchmarkRunner;
 import com.example.cachebenchmark.metrics.ResultStatus;
 
 import java.io.PrintStream;
@@ -31,6 +32,11 @@ public final class ConsoleReporter {
         out.println();
         out.printf("Target              : %s%n", r.target);
         out.printf("Operation           : %s%n", r.operation);
+        if (r.setPercent != null) {
+            out.printf("Mix                 : %s%% SET / %s%% GET%n",
+                    BenchmarkRunner.formatPercent(r.setPercent),
+                    BenchmarkRunner.formatPercent(100 - r.setPercent));
+        }
         out.println();
         out.printf("Threads             : %d%n", r.threads);
         out.printf("Key Count           : %d%n", r.keyCount);
@@ -42,7 +48,7 @@ public final class ConsoleReporter {
         out.println();
         out.printf("Successful Ops      : %,d%n", r.successfulOperations);
         out.printf("Failed Ops          : %,d%n", r.failedOperations);
-        if ("GET".equals(r.operation)) {
+        if ("GET".equals(r.operation) || "MIXED".equals(r.operation)) {
             out.printf("Cache Hits          : %,d%n", r.cacheHits);
             out.printf("Cache Misses        : %,d%n", r.cacheMisses);
         }
@@ -59,6 +65,7 @@ public final class ConsoleReporter {
         out.printf("mean                : %.3f ms%n", r.latencyMs.mean);
         out.printf("max                 : %.3f ms%n", r.latencyMs.max);
 
+        printBreakdown(r);
         printErrors(r);
         printDiagnostics(r);
 
@@ -71,6 +78,26 @@ public final class ConsoleReporter {
         out.println();
         out.println(LINE);
         out.flush();
+    }
+
+    private void printBreakdown(BenchmarkResult r) {
+        if (r.operations == null) {
+            return;
+        }
+        out.println();
+        out.println("Per Operation          GET             SET");
+        out.println(THIN);
+        BenchmarkResult.OperationBreakdown get = r.operations.get("GET");
+        BenchmarkResult.OperationBreakdown set = r.operations.get("SET");
+        out.printf("Actual Share        : %13.2f %%  %13.2f %%%n", get.actualSharePercent, set.actualSharePercent);
+        out.printf("Successful Ops      : %,15d  %,15d%n", get.successfulOperations, set.successfulOperations);
+        out.printf("Failed Ops          : %,15d  %,15d%n", get.failedOperations, set.failedOperations);
+        out.printf("Throughput          : %,15.0f  %,15.0f  ops/sec%n", get.tps, set.tps);
+        out.printf("p50                 : %15.3f  %15.3f  ms%n", get.latencyMs.p50, set.latencyMs.p50);
+        out.printf("p95                 : %15.3f  %15.3f  ms%n", get.latencyMs.p95, set.latencyMs.p95);
+        out.printf("p99                 : %15.3f  %15.3f  ms%n", get.latencyMs.p99, set.latencyMs.p99);
+        out.printf("p99.9               : %15.3f  %15.3f  ms%n", get.latencyMs.p999, set.latencyMs.p999);
+        out.printf("max                 : %15.3f  %15.3f  ms%n", get.latencyMs.max, set.latencyMs.max);
     }
 
     private void printErrors(BenchmarkResult r) {

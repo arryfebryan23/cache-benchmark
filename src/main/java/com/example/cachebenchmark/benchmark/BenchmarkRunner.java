@@ -19,7 +19,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.concurrent.CountDownLatch;
@@ -84,11 +87,17 @@ public final class BenchmarkRunner {
                 config.target().lowerCase(), operation, bench.getThreads(), bench.getKeyCount(),
                 bench.getPayloadBytes(), bench.getWarmupSeconds(), bench.getDurationSeconds(),
                 bench.getRandomSeed());
+        if (operation == Operation.MIXED) {
+            log.info("mix: {}% SET / {}% GET",
+                    formatPercent(bench.getSetPercent()), formatPercent(100 - bench.getSetPercent()));
+        }
 
         long keyBuildStart = System.nanoTime();
         KeySpace keySpace = KeySpace.create(bench.getKeyCount(), bench.isPrecomputeKeys());
         byte[] payload = PayloadFactory.create(bench.getPayloadBytes());
-        Workload workload = PayloadFactory.workloadFor(operation);
+        // A MIXED run has no single workload; each worker draws GET or SET per
+        // iteration from setPercent instead.
+        Workload workload = operation == Operation.MIXED ? null : PayloadFactory.workloadFor(operation);
         log.info("Keyspace ready: {} keys, precomputed={} ({} ms)",
                 keySpace.keyCount(), keySpace.isPrecomputed(),
                 (System.nanoTime() - keyBuildStart) / 1_000_000);
@@ -104,7 +113,7 @@ public final class BenchmarkRunner {
 
         // ---------------- MEASUREMENT ----------------
         log.info("Phase {} starting, {} s", BenchmarkPhase.MEASUREMENT, bench.getDurationSeconds());
-        MetricsCollector collector = new MetricsCollector(bench.getThreads());
+        MetricsCollector collector = new MetricsCollector(bench.getThreads(), operation == Operation.MIXED);
         GcSnapshot gcBefore = GcSnapshot.capture();
 
         try (CpuSampler cpuSampler = new CpuSampler()) {
@@ -266,7 +275,8 @@ public final class BenchmarkRunner {
         // A throwaway collector. Discarding it is the reset required by PRD
         // section 21: counters, error counts and the histogram all begin the
         // measurement phase empty because they are brand new objects.
-        MetricsCollector warmupMetrics = new MetricsCollector(config.getBenchmark().getThreads());
+        MetricsCollector warmupMetrics = new MetricsCollector(config.getBenchmark().getThreads(),
+                config.operation() == Operation.MIXED);
         double elapsed = runPhase(BenchmarkPhase.WARMUP, warmupSeconds, client, workload,
                 keySpace, payload, warmupMetrics);
 
@@ -294,6 +304,7 @@ public final class BenchmarkRunner {
                             MetricsCollector collector) throws InterruptedException {
         int threads = config.getBenchmark().getThreads();
         long randomSeed = config.getBenchmark().getRandomSeed();
+        Double setPercent = config.operation() == Operation.MIXED ? config.getBenchmark().getSetPercent() : null;
 
         ExecutorService pool = Executors.newFixedThreadPool(threads,
                 namedThreadFactory(phase.name().toLowerCase()));
@@ -303,7 +314,7 @@ public final class BenchmarkRunner {
         AtomicLong deadline = new AtomicLong();
 
         for (int i = 0; i < threads; i++) {
-            pool.execute(new Worker(i, client, workload, keySpace, payload, randomSeed,
+            pool.execute(new Worker(i, client, workload, setPercent, keySpace, payload, randomSeed,
                     collector.forWorker(i), ready, start, done, deadline));
         }
 
@@ -338,6 +349,9 @@ public final class BenchmarkRunner {
 
         result.target = config.target().lowerCase();
         result.operation = config.operation().name();
+        if (config.operation() == Operation.MIXED) {
+            result.setPercent = bench.getSetPercent();
+        }
 
         result.threads = bench.getThreads();
         result.keyCount = bench.getKeyCount();
@@ -360,13 +374,15 @@ public final class BenchmarkRunner {
         result.status = MetricsCalculator.status(result.errorRatePercent, bench.getMaxErrorRatePercent());
         result.preloaded = preloaded;
 
-        Histogram histogram = collector.mergedHistogram();
-        result.latencyMs.p50 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(50.0));
-        result.latencyMs.p95 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(95.0));
-        result.latencyMs.p99 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(99.0));
-        result.latencyMs.p999 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(99.9));
-        result.latencyMs.mean = MetricsCalculator.nanosToMillis(histogram.getMean());
-        result.latencyMs.max = MetricsCalculator.nanosToMillis(histogram.getMaxValue());
+        fillLatency(result.latencyMs, collector.mergedHistogram());
+
+        if (collector.isPerOperation()) {
+            result.operations = new LinkedHashMap<>();
+            result.operations.put(Operation.GET.name(),
+                    breakdown(collector.operationTotals(false), result.attemptedOperations, elapsedSeconds));
+            result.operations.put(Operation.SET.name(),
+                    breakdown(collector.operationTotals(true), result.attemptedOperations, elapsedSeconds));
+        }
 
         for (Map.Entry<String, ErrorSummary> entry : collector.mergedErrors().entrySet()) {
             result.errors.put(entry.getKey(),
@@ -387,6 +403,36 @@ public final class BenchmarkRunner {
         result.environment = EnvironmentInfo.capture();
 
         return result;
+    }
+
+    private static BenchmarkResult.OperationBreakdown breakdown(MetricsCollector.OperationTotals totals,
+                                                                long allAttempted,
+                                                                double elapsedSeconds) {
+        BenchmarkResult.OperationBreakdown b = new BenchmarkResult.OperationBreakdown();
+        b.attemptedOperations = totals.attempted;
+        b.successfulOperations = totals.successful;
+        b.failedOperations = totals.failed;
+        b.actualSharePercent = allAttempted == 0 ? 0.0 : totals.attempted * 100.0 / allAttempted;
+        b.tps = MetricsCalculator.tps(totals.successful, elapsedSeconds);
+        b.errorRatePercent = MetricsCalculator.errorRatePercent(totals.failed, totals.attempted);
+        fillLatency(b.latencyMs, totals.histogram);
+        return b;
+    }
+
+    private static void fillLatency(BenchmarkResult.Latency latency, Histogram histogram) {
+        latency.p50 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(50.0));
+        latency.p95 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(95.0));
+        latency.p99 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(99.0));
+        latency.p999 = MetricsCalculator.nanosToMillis(histogram.getValueAtPercentile(99.9));
+        latency.mean = MetricsCalculator.nanosToMillis(histogram.getMean());
+        latency.max = MetricsCalculator.nanosToMillis(histogram.getMaxValue());
+    }
+
+    /** 20.0 as "20", 12.5 as "12.5". Used in logs, the console and file names. */
+    public static String formatPercent(double percent) {
+        // Rounded to the mix resolution so 100 - 33.3 prints as 66.7.
+        return BigDecimal.valueOf(percent).setScale(2, RoundingMode.HALF_UP)
+                .stripTrailingZeros().toPlainString();
     }
 
     private static Double orNull(double value) {

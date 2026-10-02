@@ -36,7 +36,14 @@ public final class CsvReporter {
             "p99_ms",
             "max_ms",
             "error_rate_percent",
-            "status");
+            "status",
+            // MIXED only; empty for GET and SET runs. Appended at the end so
+            // the existing columns keep their positions.
+            "set_percent",
+            "get_tps",
+            "set_tps",
+            "get_p99_ms",
+            "set_p99_ms");
 
     public Path write(BenchmarkResult result, Path target) throws IOException {
         String content = HEADER + System.lineSeparator() + row(result) + System.lineSeparator();
@@ -78,7 +85,20 @@ public final class CsvReporter {
                 fixed(r.latencyMs.p99, 3),
                 fixed(r.latencyMs.max, 3),
                 fixed(r.errorRatePercent, 4),
-                r.status.name());
+                r.status.name(),
+                r.setPercent == null ? "" : fixed(r.setPercent, 2),
+                breakdown(r, "GET", false),
+                breakdown(r, "SET", false),
+                breakdown(r, "GET", true),
+                breakdown(r, "SET", true));
+    }
+
+    private static String breakdown(BenchmarkResult r, String operation, boolean p99) {
+        if (r.operations == null || !r.operations.containsKey(operation)) {
+            return "";
+        }
+        BenchmarkResult.OperationBreakdown b = r.operations.get(operation);
+        return p99 ? fixed(b.latencyMs.p99, 3) : fixed(b.tps, 2);
     }
 
     private static String fixed(double value, int decimals) {

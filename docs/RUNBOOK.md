@@ -152,6 +152,9 @@ cd ~/cache-benchmark
 # run tunggal
 ./scripts/run.sh --operation GET --threads 16 --payload 1024 --duration 60
 
+# campuran GET+SET: 20 % SET / 80 % GET
+./scripts/run.sh --operation MIXED --set-percent 20 --threads 16 --duration 60
+
 # override endpoint tanpa menyentuh config
 ./scripts/run.sh --redis-host 10.0.0.5 --redis-port 6379 --operation SET
 
@@ -164,7 +167,14 @@ REDIS_HOST=<ip> REDIS_PORT=<port> HZ_HOST=<ip> ./scripts/preflight.sh
 # matrix kecil, aman untuk lab berumur pendek
 TARGETS="redis" OPERATIONS="GET" PAYLOADS="1024" THREADS="1 2 4 8 16 32 64" \
 REPEATS=3 KEYS=100000 WARMUP=10 DURATION=30 ./scripts/run-matrix.sh
+
+# matrix MIXED di beberapa rasio SET
+TARGETS="redis" OPERATIONS="MIXED" SET_PERCENTS="10 20 50" PAYLOADS="1024" \
+THREADS="8 16 32" REPEATS=3 KEYS=100000 WARMUP=10 DURATION=30 ./scripts/run-matrix.sh
 ```
+
+MIXED melakukan preload seperti GET, jadi aturan `--preload false` di atas
+berlaku juga untuknya.
 
 ### Run panjang wajib pakai nohup
 
@@ -279,3 +289,19 @@ git ini.
 
 Konsekuensi praktisnya: unduh `results/` segera setelah run selesai, jangan
 ditunda sampai sesi berikutnya.
+
+---
+
+## Update, 2 Oktober 2026
+
+Catatan di atas ternyata keliru. `ed6d8e88ca1c.mylabserver.com` aktif lagi
+dengan isi utuh, termasuk `results/`, jadi waktu itu kemungkinan lab hanya
+dimatikan sementara, bukan dihancurkan. Tetap periksa hostname dulu sebelum
+memilih Skenario A atau B.
+
+| | |
+|---|---|
+| Ter-deploy | operation `MIXED` (`--set-percent`), dikirim dari working tree, belum di-commit |
+| Konfigurasi | `config/benchmark.yaml` di VM dipertahankan; versi baru dari repo disimpan sebagai `config/benchmark.yaml.example` |
+| `summary.csv` | baris lama 18 kolom dilengkapi menjadi 23 kolom (5 kolom MIXED kosong); aslinya di `results/summary.csv.bak-18col` |
+| Smoke run MIXED | Redis, 20 % SET, 8 thread, 1 KB, 10 k key, 10 detik → 9.638 ops/sec (GET 7.716 + SET 1.921), p99 2,339 ms, VALID |

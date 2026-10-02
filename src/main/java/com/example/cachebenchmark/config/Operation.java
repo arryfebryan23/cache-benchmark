@@ -7,7 +7,13 @@ import java.util.stream.Collectors;
 public enum Operation {
 
     GET,
-    SET;
+    SET,
+
+    /**
+     * GET and SET interleaved in one closed loop. Each iteration draws which
+     * of the two to run, with SET chosen {@code setPercent} of the time.
+     */
+    MIXED;
 
     public static Operation parse(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -23,7 +29,7 @@ public enum Operation {
 
     /** True when the operation reads, and therefore needs a populated keyspace. */
     public boolean isRead() {
-        return this == GET;
+        return this == GET || this == MIXED;
     }
 
     private static String valid() {

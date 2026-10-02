@@ -87,6 +87,25 @@ class BenchmarkConfigValidationTest {
     }
 
     @Test
+    void acceptsMixedOperation() {
+        BenchmarkConfig config = valid();
+        config.getBenchmark().setOperation("mixed");
+        config.getBenchmark().setSetPercent(20);
+        assertDoesNotThrow(config::validate);
+    }
+
+    @Test
+    void rejectsSetPercentOutsideZeroToHundred() {
+        BenchmarkConfig config = valid();
+        config.getBenchmark().setOperation("MIXED");
+        config.getBenchmark().setSetPercent(120);
+        assertMessageContains(config, "setPercent must be between 0 and 100");
+
+        config.getBenchmark().setSetPercent(-1);
+        assertMessageContains(config, "setPercent must be between 0 and 100");
+    }
+
+    @Test
     void rejectsInvalidRedisPort() {
         BenchmarkConfig config = valid();
         config.getRedis().setPort(70000);
