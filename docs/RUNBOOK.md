@@ -301,7 +301,7 @@ memilih Skenario A atau B.
 
 | | |
 |---|---|
-| Ter-deploy | operation `MIXED` (`--set-percent`), dikirim dari working tree, belum di-commit |
+| Ter-deploy | operation `MIXED` (`--set-percent`), commit `687c56e` |
 | Konfigurasi | `config/benchmark.yaml` di VM dipertahankan; versi baru dari repo disimpan sebagai `config/benchmark.yaml.example` |
 | `summary.csv` | baris lama 18 kolom dilengkapi menjadi 23 kolom (5 kolom MIXED kosong); aslinya di `results/summary.csv.bak-18col` |
 | Smoke run MIXED | Redis, 20 % SET, 8 thread, 1 KB, 10 k key, 10 detik → 9.638 ops/sec (GET 7.716 + SET 1.921), p99 2,339 ms, VALID |
